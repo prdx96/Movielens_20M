@@ -1,0 +1,6 @@
+data/*.csv
+data/*/*.csv
+tmp/
+notebook/*.ipynb_checkpoints
+*_test.ipynb
+*.zip
