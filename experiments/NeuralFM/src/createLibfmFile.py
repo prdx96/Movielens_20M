@@ -103,7 +103,7 @@ class CreateLibfmFile():
     return sp_matrix, label
 
   def convert(self):
-    # positiveデータの作成（出てくるものはsparse.csr_matrixとndarray）
+    # create sparse.csr_matrix and ndarray
     X_train, y_train = self.create_sp_matrix(self.train_data)
     filename_train = os.path.join(self.target_dir, 'train.libfm')
     dump_svmlight_file(X_train, y_train, filename_train)

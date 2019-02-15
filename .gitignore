@@ -7,3 +7,4 @@ tmp/
 *.ipynb_checkpoints
 *_test.ipynb
 *__pycache__
+*.zip
