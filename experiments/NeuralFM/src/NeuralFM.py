@@ -169,10 +169,10 @@ class NeuralFM(BaseEstimator, TransformerMixin):
       self.saver = tf.train.Saver()
       init = tf.global_variables_initializer()
 
-      run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-      run_metadata = tf.RunMetadata()
+      self.run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+      self.run_metadata = tf.RunMetadata()
       self.sess = tf.Session()
-      self.sess.run(init, options=run_options, run_metadata=run_metadata)
+      self.sess.run(init, options=self.run_options, run_metadata=self.run_metadata)
 
       step_stats = run_metadata.step_stats
       self.tl = timeline.Timeline(step_stats)
@@ -237,7 +237,13 @@ class NeuralFM(BaseEstimator, TransformerMixin):
 
   def partial_fit(self, data):  # fit a batch
     feed_dict = {self.train_features: data['X'], self.train_labels: data['Y'], self.dropout_keep: self.keep_prob, self.train_phase: True}
-    loss, opt = self.sess.run((self.loss, self.optimizer), feed_dict=feed_dict)
+    loss, opt = self.sess.run((self.loss, self.optimizer), feed_dict=feed_dict, options=self.run_options, run_metadata=self.run_metadata)
+    step_stats = run_metadata.step_stats
+    tl = timeline.Timeline(step_stats)
+    ctf = tl.generate_chrome_trace_format(show_memory=True, show_dataflow=True)
+
+    with open("timeline.json", "w") as f:
+        f.write(ctf)
     return loss
 
   def get_random_block_from_data(self, data, batch_size):  # generate a random block of training data
