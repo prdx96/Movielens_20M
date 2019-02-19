@@ -293,7 +293,7 @@ class NeuralFM(BaseEstimator, TransformerMixin):
       t2 = time()
 
       if not os.path.exists(self.modelfile_path):
-        os.mkdir(self.modelfilepath)
+        os.mkdir(self.modelfile_path)
       self.saver.save(self.sess, self.modelfile_path)
       # output validation
       train_result = self.evaluate(Train_data)
