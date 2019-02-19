@@ -173,7 +173,7 @@ class NeuralFM(BaseEstimator, TransformerMixin):
       self.sess = tf.Session()
       self.sess.run(init, options=run_options, run_metadata=run_metadata)
 
-      self.step_stats = run_metadata.step_stats
+      step_stats = run_metadata.step_stats
       tl = timeline.Timeline(step_stats)
       ctf = tl.generate_chrome_trace_format(show_memory=True, show_dataflow=True)
 
