@@ -359,8 +359,6 @@ if __name__ == '__main__':
   # Training
   t1 = time()
   model = NeuralFM(data.features_M, args.hidden_factor, eval(args.layers), args.loss_type, args.pretrain, args.epoch, args.batch_size, args.lr, args.lamda, eval(args.keep_prob), args.optimizer, args.batch_norm, activation_function, args.verbose, args.early_stop, execute_time)
-  print(len(model.weights))
-  print(sys.getsizeof(model.weights))
   model.train(data.Train_data, data.Validation_data, data.Test_data)
 
   # Find the best validation result across iterations
