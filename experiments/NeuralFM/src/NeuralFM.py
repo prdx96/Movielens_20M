@@ -238,7 +238,7 @@ class NeuralFM(BaseEstimator, TransformerMixin):
   def partial_fit(self, data):  # fit a batch
     feed_dict = {self.train_features: data['X'], self.train_labels: data['Y'], self.dropout_keep: self.keep_prob, self.train_phase: True}
     loss, opt = self.sess.run((self.loss, self.optimizer), feed_dict=feed_dict, options=self.run_options, run_metadata=self.run_metadata)
-    step_stats = run_metadata.step_stats
+    step_stats = self.run_metadata.step_stats
     tl = timeline.Timeline(step_stats)
     ctf = tl.generate_chrome_trace_format(show_memory=True, show_dataflow=True)
 
