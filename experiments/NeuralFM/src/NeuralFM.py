@@ -285,11 +285,14 @@ class NeuralFM(BaseEstimator, TransformerMixin):
       t1 = time()
       self.shuffle_in_unison_scary(Train_data['X'], Train_data['Y'])
       total_batch = int(len(Train_data['Y']) / self.batch_size)
+      print('Total iterations: %(total_batch)d' % {'total_batch': total_batch})
       for i in range(total_batch):
         # generate a batch
         batch_xs = self.get_random_block_from_data(Train_data, self.batch_size)
         # Fit training
         self.partial_fit(batch_xs)
+        if i % 200 == 0:
+          print('Iterations %(iters)d: %(sec)s sec elalsed.' % {'iters': i, 'sec': str(time() - t1)})
       t2 = time()
 
       if not os.path.exists(self.modelfile_path):
