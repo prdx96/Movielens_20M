@@ -175,12 +175,8 @@ class NeuralFM(BaseEstimator, TransformerMixin):
       self.sess.run(init, options=run_options, run_metadata=run_metadata)
 
       step_stats = run_metadata.step_stats
-      tl = timeline.Timeline(step_stats)
-      ctf = tl.generate_chrome_trace_format(show_memory=True, show_dataflow=True)
-
-      with open("timeline.json", "w") as f:
-          f.write(ctf)
-
+      self.tl = timeline.Timeline(step_stats)
+      
       # number of params
       total_parameters = 0
       for variable in self.weights.values():
@@ -375,6 +371,11 @@ if __name__ == '__main__':
   best_epoch = model.valid_rmse.index(best_valid_score)
   print("Best Iter(validation)= %d\t train = %.4f, valid = %.4f, test = %.4f [%.1f s]"
        %(best_epoch+1, model.train_rmse[best_epoch], model.valid_rmse[best_epoch], model.test_rmse[best_epoch], time()-t1))
+
+  ctf = model.tl.generate_chrome_trace_format(show_memory=True, show_dataflow=True)
+
+  with open("timeline.json", "w") as f:
+      f.write(ctf)
 
   export_learning_process(model.train_rmse, model.valid_rmse, model.test_rmse, execute_time)
   export_result(modelname='NeuralFM', rmse=model.test_rmse[best_epoch], top_k=None, recall=None, f1=None, precision=None, dataset=args.path, executed_at=execute_time)
