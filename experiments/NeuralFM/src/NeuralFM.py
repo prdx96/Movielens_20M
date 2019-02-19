@@ -84,7 +84,8 @@ class NeuralFM(BaseEstimator, TransformerMixin):
     self.verbose = verbose
     self.activation_function = activation_function
     self.early_stop = early_stop
-    self.modelfile_path = os.path.join('../models', execute_time ,execute_time)
+    self.execute_time = execute_time
+    self.modelfile_path = os.path.join('../models', self.execute_time)
     # performance of each epoch
     self.train_rmse, self.valid_rmse, self.test_rmse = [], [], []
 
@@ -291,13 +292,14 @@ class NeuralFM(BaseEstimator, TransformerMixin):
         batch_xs = self.get_random_block_from_data(Train_data, self.batch_size)
         # Fit training
         self.partial_fit(batch_xs)
-        if i % 200 == 0:
+        if i % 5000 == 0:
           print('Iterations %(iters)d: %(sec)s sec elalsed.' % {'iters': i, 'sec': str(time() - t1)})
       t2 = time()
 
       if not os.path.exists(self.modelfile_path):
         os.mkdir(self.modelfile_path)
-      self.saver.save(self.sess, self.modelfile_path)
+      model_filename = os.path.join(self.modelfile_path, self.execute_time)
+      self.saver.save(self.sess, model_filename)
       # output validation
       train_result = self.evaluate(Train_data)
       valid_result = self.evaluate(Validation_data)
