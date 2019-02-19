@@ -19,23 +19,23 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import log_loss
-from time import time, gmtime, strftime
+from time import time
 import argparse
-import json
-import LoadData as DATA
+import trainer.LoadData as DATA
 from tensorflow.contrib.layers.python.layers import batch_norm as batch_norm
-from utils import export_result, export_learning_process
 
 #################### Arguments ####################
 def parse_args():
   parser = argparse.ArgumentParser(description="Run Neural FM.")
-  parser.add_argument('--path', nargs='?', default='../data/preprocessed',
+  parser.add_argument('--path', nargs='?', default='data/',
             help='Input data path.')
+  parser.add_argument('--dataset', nargs='?', default='frappe',
+            help='Choose a dataset.')
   parser.add_argument('--epoch', type=int, default=200,
             help='Number of epochs.')
   parser.add_argument('--pretrain', type=int, default=0,
             help='Pre-train flag. 0: train from scratch; 1: load from pretrain file')
-  parser.add_argument('--batch_size', type=int, default=128,
+  parser.add_argument('--batch_size', type=int, default=256,
             help='Batch size.')
   parser.add_argument('--hidden_factor', type=int, default=64,
             help='Number of hidden factors.')
@@ -63,7 +63,7 @@ def parse_args():
 
 class NeuralFM(BaseEstimator, TransformerMixin):
   def __init__(self, features_M, hidden_factor, layers, loss_type, pretrain_flag, epoch, batch_size, learning_rate, lamda_bilinear,
-         keep_prob, optimizer_type, batch_norm, activation_function, verbose, early_stop, execute_time, random_seed=2016):
+         keep_prob, optimizer_type, batch_norm, activation_function, verbose, early_stop, random_seed=2016):
     # bind params to class
     self.batch_size = batch_size
     self.hidden_factor = hidden_factor
@@ -82,7 +82,6 @@ class NeuralFM(BaseEstimator, TransformerMixin):
     self.verbose = verbose
     self.activation_function = activation_function
     self.early_stop = early_stop
-    self.modelfile_path = os.path.join('../models', execute_time ,execute_time)
     # performance of each epoch
     self.train_rmse, self.valid_rmse, self.test_rmse = [], [], []
 
@@ -134,7 +133,7 @@ class NeuralFM(BaseEstimator, TransformerMixin):
       self.FM = tf.matmul(self.FM, self.weights['prediction'])   # None * 1
 
       # _________out _________
-      Bilinear = tf.reduce_sum(self.FM, 1, keepdims=True)  # None * 1
+      Bilinear = tf.reduce_sum(self.FM, 1, keep_dims=True)  # None * 1
       self.Feature_bias = tf.reduce_sum(tf.nn.embedding_lookup(self.weights['feature_bias'], self.train_features) , 1)  # None * 1
       Bias = self.weights['bias'] * tf.ones_like(self.train_labels)  # None * 1
       self.out = tf.add_n([Bilinear, self.Feature_bias, Bias])  # None * 1
@@ -165,18 +164,8 @@ class NeuralFM(BaseEstimator, TransformerMixin):
       # init
       self.saver = tf.train.Saver()
       init = tf.global_variables_initializer()
-
-      run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-      run_metadata = tf.RunMetadata()
-      self.sess = tf.Session()
-      self.sess.run(init, options=run_options, run_metadata=run_metadata)
-
-      self.step_stats = run_metadata.step_stats
-      tl = timeline.line(step_stats)
-      ctf = tl.generate_chrome_trace_format(show_memory=True, show_dataflow=True)
-
-      with open("timeline.json", "w") as f:
-          f.write(ctf)
+      self.sess = tf.Session(config=tf.ConfigProto(inter_op_parallelism_threads=50, intra_op_parallelism_threads=50))
+      self.sess.run(init)
 
       # number of params
       total_parameters = 0
@@ -192,7 +181,7 @@ class NeuralFM(BaseEstimator, TransformerMixin):
   def _initialize_weights(self):
     all_weights = dict()
     if self.pretrain_flag > 0: # with pretrain
-      pretrain_file = '../pretrain/%s_%d/%s_%d' %(args.hidden_factor, args.hidden_factor)
+      pretrain_file = '../pretrain/%s_%d/%s_%d' %(args.dataset, args.hidden_factor, args.dataset, args.hidden_factor)
       weight_saver = tf.train.import_meta_graph(pretrain_file + '.meta')
       pretrain_graph = tf.get_default_graph()
       feature_embeddings = pretrain_graph.get_tensor_by_name('feature_embeddings:0')
@@ -205,8 +194,10 @@ class NeuralFM(BaseEstimator, TransformerMixin):
       all_weights['feature_bias'] = tf.Variable(fb, dtype=tf.float32)
       all_weights['bias'] = tf.Variable(b, dtype=tf.float32)
     else: # without pretrain
+      print('set weights')
       all_weights['feature_embeddings'] = tf.Variable(
         tf.random_normal([self.features_M, self.hidden_factor], 0.0, 0.01), name='feature_embeddings')  # features_M * K
+      print('set feature bias')
       all_weights['feature_bias'] = tf.Variable(tf.random_uniform([self.features_M, 1], 0.0, 0.0), name='feature_bias')  # features_M * 1
       all_weights['bias'] = tf.Variable(tf.constant(0.0), name='bias')  # 1 * 1
     # deep layers
@@ -264,6 +255,24 @@ class NeuralFM(BaseEstimator, TransformerMixin):
         break
     return {'X': X, 'Y': Y}
 
+  def get_eval_block_from_data(self, data, start_index):
+    if start_index + 100000 > len(data):
+      end_index = len(data)
+    else:
+      end_index = start_index + 100000
+
+    X , Y = [], []
+    # forward get sample
+    i = start_index
+    while len(X) < 100000 and i < len(data['X']):
+      if len(data['X'][i]) == len(data['X'][start_index]):
+        Y.append(data['Y'][i])
+        X.append(data['X'][i])
+        i = i + 1
+      else:
+        break
+    return {'X': X, 'Y': Y}
+
   def shuffle_in_unison_scary(self, a, b):
     rng_state = np.random.get_state()
     np.random.shuffle(a)
@@ -271,42 +280,48 @@ class NeuralFM(BaseEstimator, TransformerMixin):
     np.random.shuffle(b)
 
   def train(self, Train_data, Validation_data, Test_data):  # fit a dataset
+    print('Start training...')
     # Check Init performance
-    if self.verbose > 0:
-      t2 = time()
-      init_train = self.evaluate(Train_data)
-      init_valid = self.evaluate(Validation_data)
-      init_test = self.evaluate(Test_data)
-      print("Init: \t train=%.4f, validation=%.4f, test=%.4f [%.1f s]" %(init_train, init_valid, init_test, time()-t2))
+    #if self.verbose > 0:
+      #t2 = time()
+      #init_train = self.evaluate(Train_data)
+      #init_valid = self.evaluate(Validation_data)
+      #init_test = self.evaluate(Test_data)
+      #print("Init: \t train=%.4f, validation=%.4f, test=%.4f [%.1f s]" %(init_train, init_valid, init_test, time()-t2))
 
     for epoch in range(self.epoch):
-      t1 = time()
-      self.shuffle_in_unison_scary(Train_data['X'], Train_data['Y'])
-      total_batch = int(len(Train_data['Y']) / self.batch_size)
-      for i in range(total_batch):
-        # generate a batch
-        batch_xs = self.get_random_block_from_data(Train_data, self.batch_size)
-        # Fit training
-        self.partial_fit(batch_xs)
-      t2 = time()
+        t1 = time()
+        self.shuffle_in_unison_scary(Train_data['X'], Train_data['Y'])
+        total_batch = int(len(Train_data['Y']) / self.batch_size)
+        for i in range(total_batch):
+            t2 = time()
+            if i % 2000 == 0 and i != 0:
+                print('%(epoch)d iters, %(sec)s sec elapsed...' % {'epoch': i, 'sec': str(t2 - t1)})
+            # generate a batch
+            batch_xs = self.get_random_block_from_data(Train_data, self.batch_size)
+            # Fit training
+            self.partial_fit(batch_xs)
+        t4 = time()
+        print('Finished iterations: %(sec)s sec elapsed...' % {'sec': str(t4 - t1)})
 
-      if not os.path.exists(self.modelfile_path):
-        os.mkdir(self.modelfilepath)
-      self.saver.save(self.sess, self.modelfile_path)
-      # output validation
-      train_result = self.evaluate(Train_data)
-      valid_result = self.evaluate(Validation_data)
-      test_result = self.evaluate(Test_data)
+        # output validation
+        print('get train_result')
+        train_result = self.evaluate(Train_data)
+        print('get valid_result')
+        valid_result = self.evaluate(Validation_data)
+        test_result = self.evaluate(Test_data)
 
-      self.train_rmse.append(train_result)
-      self.valid_rmse.append(valid_result)
-      self.test_rmse.append(test_result)
-      if self.verbose > 0 and epoch%self.verbose == 0:
-        print("Epoch %d [%.1f s]\ttrain=%.4f, validation=%.4f, test=%.4f [%.1f s]"
-            %(epoch+1, t2-t1, train_result, valid_result, test_result, time()-t2))
-      if self.early_stop > 0 and self.eva_termination(self.valid_rmse):
-        #print "Early stop at %d based on validation result." %(epoch+1)
-        break
+        self.train_rmse.append(train_result)
+        self.valid_rmse.append(valid_result)
+        self.test_rmse.append(test_result)
+        if self.verbose > 0 and epoch%self.verbose == 0:
+            elapsed_time = time() - t1
+            print("Epoch %d [%.1f s]\ttrain=%.4f, validation=%.4f, test=%.4f [%.1f s]"
+                  %(epoch+1, t2-t1, train_result, valid_result, test_result, elapsed_time))
+
+        if self.early_stop > 0 and self.eva_termination(self.valid_rmse):
+            #print "Early stop at %d based on validation result." %(epoch+1)
+            break
 
   def eva_termination(self, valid):
     if self.loss_type == 'square_loss':
@@ -321,40 +336,49 @@ class NeuralFM(BaseEstimator, TransformerMixin):
 
   def evaluate(self, data):  # evaluate the results for an input set
     num_example = len(data['Y'])
+    y_pred = []
+    y_true = []
+
+    total_chunk = int(len(data['Y']) / 10000)
+    print('total chunk {}'.format(total_chunk))
+    for i in range(0,total_chunk,10000):
+      # generate a batch
+      print(i)
+      batch_xs = self.get_eval_block_from_data(data, i)
+
+      feed_dict = {self.train_features: batch_xs['X'], self.train_labels: [[y] for y in batch_xs['Y']], self.dropout_keep: self.no_dropout, self.train_phase: False}
+      predictions = self.sess.run((self.out), feed_dict=feed_dict)
+      print(predictions.shape)
+      y_pred_tmp = np.reshape(predictions, (-1,))
+      y_pred.append(y_pred_tmp)
+      y_true_tmp = np.reshape(batch_xs['Y'], (-1,))
+      y_true.append(y_true_tmp)
+    y_pred = np.array(y_pred).reshape(-1,1)
+    y_true = np.array(y_true).reshape(-1,1)
+    '''
+    num_example = len(data['Y'])
     feed_dict = {self.train_features: data['X'], self.train_labels: [[y] for y in data['Y']], self.dropout_keep: self.no_dropout, self.train_phase: False}
     predictions = self.sess.run((self.out), feed_dict=feed_dict)
     y_pred = np.reshape(predictions, (num_example,))
     y_true = np.reshape(data['Y'], (num_example,))
+    '''
+
     if self.loss_type == 'square_loss':
-      predictions_bounded = np.maximum(y_pred, np.ones(num_example) * min(y_true))  # bound the lower values
-      predictions_bounded = np.minimum(predictions_bounded, np.ones(num_example) * max(y_true))  # bound the higher values
-      RMSE = math.sqrt(mean_squared_error(y_true, predictions_bounded))
+      RMSE = mean_squared_error(y_true, y_pred)
+      print('return RMSE {}'.format(RMSE))
       return RMSE
     elif self.loss_type == 'log_loss':
       logloss = log_loss(y_true, y_pred) # I haven't checked the log_loss
       return logloss
-'''     # for testing the classification accuracy
-      predictions_binary = []
-      for item in y_pred:
-        if item > 0.5:
-          predictions_binary.append(1.0)
-        else:
-          predictions_binary.append(0.0)
-      Accuracy = accuracy_score(y_true, predictions_binary)
-      return Accuracy '''
+      
 
 if __name__ == '__main__':
-  execute_time = strftime("%Y%m%d_%H%M%S", gmtime())
   # Data loading
   args = parse_args()
-  param_filename = execute_time + '_NeuralFM_params.json'
-  param_filepath = os.path.join('../log/args_json', param_filename)
-  with open(param_filepath, 'w') as f:
-    json.dump(vars(args), f)
-  data = DATA.LoadData(args.path, args.loss_type)
+  data = DATA.LoadData(args.path, args.dataset, args.loss_type)
   if args.verbose > 0:
-    print("Neural FM: hidden_factor=%d, dropout_keep=%s, layers=%s, loss_type=%s, pretrain=%d, #epoch=%d, batch=%d, lr=%.4f, lambda=%.4f, optimizer=%s, batch_norm=%d, activation=%s, early_stop=%d"
-        %(args.hidden_factor, args.keep_prob, args.layers, args.loss_type, args.pretrain, args.epoch, args.batch_size, args.lr, args.lamda, args.optimizer, args.batch_norm, args.activation, args.early_stop))
+    print("Neural FM: dataset=%s, hidden_factor=%d, dropout_keep=%s, layers=%s, loss_type=%s, pretrain=%d, #epoch=%d, batch=%d, lr=%.4f, lambda=%.4f, optimizer=%s, batch_norm=%d, activation=%s, early_stop=%d"
+        %(args.dataset, args.hidden_factor, args.keep_prob, args.layers, args.loss_type, args.pretrain, args.epoch, args.batch_size, args.lr, args.lamda, args.optimizer, args.batch_norm, args.activation, args.early_stop))
   activation_function = tf.nn.relu
   if args.activation == 'sigmoid':
     activation_function = tf.sigmoid
@@ -365,9 +389,7 @@ if __name__ == '__main__':
 
   # Training
   t1 = time()
-  model = NeuralFM(data.features_M, args.hidden_factor, eval(args.layers), args.loss_type, args.pretrain, args.epoch, args.batch_size, args.lr, args.lamda, eval(args.keep_prob), args.optimizer, args.batch_norm, activation_function, args.verbose, args.early_stop, execute_time)
-  print(len(model.weights))
-  print(sys.getsizeof(model.weights))
+  model = NeuralFM(data.features_M, args.hidden_factor, eval(args.layers), args.loss_type, args.pretrain, args.epoch, args.batch_size, args.lr, args.lamda, eval(args.keep_prob), args.optimizer, args.batch_norm, activation_function, args.verbose, args.early_stop)
   model.train(data.Train_data, data.Validation_data, data.Test_data)
 
   # Find the best validation result across iterations
@@ -377,8 +399,5 @@ if __name__ == '__main__':
   elif args.loss_type == 'log_loss':
     best_valid_score = max(model.valid_rmse)
   best_epoch = model.valid_rmse.index(best_valid_score)
-  print("Best Iter(validation)= %d\t train = %.4f, valid = %.4f, test = %.4f [%.1f s]"
+  print ("Best Iter(validation)= %d\t train = %.4f, valid = %.4f, test = %.4f [%.1f s]"
        %(best_epoch+1, model.train_rmse[best_epoch], model.valid_rmse[best_epoch], model.test_rmse[best_epoch], time()-t1))
-
-  export_learning_process(model.train_rmse, model.valid_rmse, model.test_rmse, execute_time)
-  export_result(modelname='NeuralFM', rmse=model.test_rmse[best_epoch], top_k=None, recall=None, f1=None, precision=None, dataset=args.path, executed_at=execute_time)

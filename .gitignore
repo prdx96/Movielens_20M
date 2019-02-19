@@ -8,3 +8,6 @@ tmp/
 *_test.ipynb
 *__pycache__
 *.zip
+Untitled.ipynb
+*.pyc
+execute_scripts
