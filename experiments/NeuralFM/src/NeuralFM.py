@@ -174,7 +174,7 @@ class NeuralFM(BaseEstimator, TransformerMixin):
       self.sess = tf.Session()
       self.sess.run(init, options=self.run_options, run_metadata=self.run_metadata)
 
-      step_stats = run_metadata.step_stats
+      step_stats = self.run_metadata.step_stats
       self.tl = timeline.Timeline(step_stats)
 
       # number of params
