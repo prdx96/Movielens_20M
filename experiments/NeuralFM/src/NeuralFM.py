@@ -25,6 +25,8 @@ import json
 import LoadData as DATA
 from tensorflow.contrib.layers.python.layers import batch_norm as batch_norm
 from utils import export_result, export_learning_process
+from tensorflow.python.client import timeline
+
 
 #################### Arguments ####################
 def parse_args():
@@ -333,15 +335,6 @@ class NeuralFM(BaseEstimator, TransformerMixin):
     elif self.loss_type == 'log_loss':
       logloss = log_loss(y_true, y_pred) # I haven't checked the log_loss
       return logloss
-'''     # for testing the classification accuracy
-      predictions_binary = []
-      for item in y_pred:
-        if item > 0.5:
-          predictions_binary.append(1.0)
-        else:
-          predictions_binary.append(0.0)
-      Accuracy = accuracy_score(y_true, predictions_binary)
-      return Accuracy '''
 
 if __name__ == '__main__':
   execute_time = strftime("%Y%m%d_%H%M%S", gmtime())

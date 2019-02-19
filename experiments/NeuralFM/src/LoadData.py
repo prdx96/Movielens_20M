@@ -62,7 +62,6 @@ class LoadData(object):
         else:
             Train_data = self.construct_dataset(X_, Y_)
         print("# of training:" , len(Y_))
-        print('Finished in')
 
         X_, Y_ , Y_for_logloss= self.read_data(self.validationfile)
         if loss_type == 'log_loss':
