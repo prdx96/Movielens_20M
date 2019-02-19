@@ -176,7 +176,7 @@ class NeuralFM(BaseEstimator, TransformerMixin):
 
       step_stats = run_metadata.step_stats
       self.tl = timeline.Timeline(step_stats)
-      
+
       # number of params
       total_parameters = 0
       for variable in self.weights.values():
@@ -289,7 +289,7 @@ class NeuralFM(BaseEstimator, TransformerMixin):
         # Fit training
         self.partial_fit(batch_xs)
         if i % 5000 == 0:
-          print('Iterations %(iters)d: %(sec)s sec elalsed.' % {'iters': i, 'sec': str(time() - t1)})
+          print('Iterations %(iters)d: %(sec)s sec elapsed.' % {'iters': i, 'sec': str(time() - t1)})
       t2 = time()
 
       if not os.path.exists(self.modelfile_path):
