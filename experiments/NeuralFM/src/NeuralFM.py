@@ -41,7 +41,7 @@ def parse_args():
             help='Batch size.')
   parser.add_argument('--hidden_factor', type=int, default=64,
             help='Number of hidden factors.')
-  parser.add_argument('--layers', nargs='?', default='[64]',
+  parser.add_argument('--layers', nargs='?', default='[16]',
             help="Size of each layer.")
   parser.add_argument('--keep_prob', nargs='?', default='[0.8,0.5]',
             help='Keep probability (i.e., 1-dropout_ratio) for each deep layer and the Bi-Interaction layer. 1: no dropout. Note that the last index is for the Bi-Interaction layer.')
